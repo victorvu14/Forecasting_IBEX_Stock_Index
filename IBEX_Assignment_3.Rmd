@@ -124,9 +124,9 @@ Box.test(fit1$residuals^2, lag = 20)
 
 The following questions will be answered:
 
-**A.	Do we have multicollinearity with these explanatory variables? 
+A.	Do we have multicollinearity with these explanatory variables? 
 
-**B.	Are the residuals White Noise?
+B.	Are the residuals White Noise?
 
 Plotting all the variables
 
@@ -236,9 +236,9 @@ In this case, we will compare both models (in question 3), one without fitting a
 
 The following questions will be answered:
 
-**A.	Does this model maintain the same number of lags as the model found in question 2, and the same number of regressors as those found in question 1?
+A.	Does this model maintain the same number of lags as the model found in question 2, and the same number of regressors as those found in question 1?
 
-**B.	Derive the final equation for the selected model
+B.	Derive the final equation for the selected model
 
 In this case, we will use the AR model at lag 4 because there is a lag at time 4 in the PACF (which was not done in question 2 for model 3).
 
