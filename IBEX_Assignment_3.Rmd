@@ -1,0 +1,345 @@
+---
+title: "IBEX Assignment 3"
+author: "Vikas Agarwal, Camille Blain-Coallier, Giulio De Felice, Nayla Fakhoury, Alejandro Koury, Federico Loguercio, Victor Vu"
+date: "03/06/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+rm(list = ls())
+
+local({
+    r <- getOption("repos")
+    r["CRAN"] <- "http://cran.rediris.es/"
+    options(repos = r)})
+
+install.packages("psych")
+library("psych")
+library("fBasics")
+library("forecast") 
+```
+
+#### Data Import 
+
+No need for a split and train data considering the small size of the data.
+
+```{r}
+
+df_raw <- read.csv("https://gist.githubusercontent.com/f-loguercio/df301be228aff27132d0f3d6fa4ee932/raw/6ccefaa8243e5af3e1e40717009c6ceba0b16d56/hw3_fts.csv", header = TRUE, sep = ";", dec=",")
+
+colnames(df_raw)<-c("Week","IBEX","EX","ST","LT")
+
+```
+
+#### Create Separate Variables 
+```{r}
+
+IBEX<-df_raw[,2]
+EX<-df_raw[,3]
+ST<-df_raw[,4]
+LT<-df_raw[,5]
+
+
+```
+
+###1. Find the best time series model for the variable "ibex"
+
+```{r}
+nlags=50     
+ts.plot(IBEX)
+```
+
+From the original dataset for the variable IBEX, we can see that the data is not stationary.
+
+```{r}
+acf(IBEX,nlags)
+pacf(IBEX,nlags) 
+```
+
+In addition, there seems to be presence of cyclicality in the data, with the ACF having sinusodial shape. 
+
+```{r}
+s=52
+nsdiffs(IBEX, m = s, test = c("ocsb"))
+ndiffs(IBEX, alpha=0.05, test=c("adf"))
+
+```
+
+The formal test suggests that one regular difference needs to be taken. No seasonal difference is needed. 
+
+We will first take that suggested regular difference and then analyse the remaining structure in the data.
+
+```{r}
+fit1 <- arima(IBEX,order=c(0,1,0),seasonal=list(order=c(0,0,0),period=s)) 
+fit1
+
+plot(fit1$residuals)
+```
+
+Data seems to be stationary in the variance and in the mean. This is confirmed with the formal tests indicating no need for additional differences.
+
+```{r}
+nsdiffs(fit1$residuals, m = s, test = c("ocsb"))
+ndiffs(fit1$residuals, alpha=0.05, test=c("adf"))
+
+```
+
+We will first proceed to estimate a model with this data and then compare the estimation performance with the rest of the following models.
+
+
+Let's analyse the residuals in terms of autocorrelation within ACF and PACF:
+
+```{r}
+acf(fit1$residuals,nlags)
+pacf(fit1$residuals,nlags)
+
+```
+
+There is no structure in the mean of the data, no remaining autocorrelation can be identified in the ACF and the PACF. The Box-Pierce test formally confirms that the data is White Noise. 
+
+```{r}
+Box.test(fit1$residuals, lag = 20)
+```
+
+Checking for normality.
+```{r}
+shapiro.test(fit1$residuals)  
+```
+
+Formal Shapiro Test confirms the data is normally distributed, meaning the residuals are Gaussian White Noise (GWN). Thus, we can infer the presence of Strict White Noise (SWN) as well, confirmed by the formal test (Box-Test of the squared residuals)
+
+```{r}
+acf(fit1$residuals^2,nlags)
+pacf(fit1$residuals^2,nlags) 
+
+Box.test(fit1$residuals^2, lag = 20)
+```
+
+###2. Find the best regression model for the dependent variable "ibex". 
+
+The following questions will be answered:
+
+**A.	Do we have multicollinearity with these explanatory variables? 
+
+**B.	Are the residuals White Noise?
+
+Plotting all the variables
+
+```{r}
+par(mfrow=c(1,1))
+ts.plot(IBEX,col="black",ylab="percentage",
+        main = "Orginal Dataset Containing All Variables")
+par(new=TRUE)
+ts.plot(EX,col="blue")
+par(new=TRUE)
+ts.plot(ST,col="green")
+par(new=TRUE)
+ts.plot(LT,col="red")
+
+```
+
+Verifying correlation between all the variables. There seems to be some correlation between variables. However, it is important to mention that the highest correlations are between the target variable (IBEX) and the rest of the variables. The rest of the variables are less correlated to each other, confirming the absence of multicollinearity between the explanatory variables. 
+
+```{r}
+corr_all<-corr.test(df_raw[2:5])
+corr_all
+```
+
+Fitting a regression model with all the explanatory variables.
+
+```{r}
+m1 = lm(IBEX ~ EX + ST + LT)
+
+summary(m1)
+```
+
+All variables are significant in estimating the model (all below p-value<0.05).
+
+We then check if the residuals of the joint estimation are stationary.
+```{r}
+plot(m1$residuals,type='l')
+acf(m1$residuals,lag=36)
+pacf(m1$residuals,lag=36)
+
+```
+
+Joint estimation of the residuals is not stationary for model 1 (m1), therefore we need to take one difference for every explanatory variable.
+
+We check the residuals for the difference of the variables to see if they are stationary.
+
+```{r}
+plot(diff(m1$residuals),type='l')
+acf(diff(m1$residuals),lag=50)
+pacf(diff(m1$residuals),lag=50)
+```
+
+
+Following the difference of the model, we can see that the joint estimation has become stationary. Thus, from this, we confirm the need to take a difference for all the variables so the joint becomes stationary.
+
+Take the differences of each variable. 
+```{r}
+cIBEX<-diff(IBEX)
+cEX<-diff(EX)
+cST<-diff(ST)
+cLT<-diff(LT)
+
+```
+
+Now, plotting the differences for each variable - we can see that each of them are stationary.
+```{r}
+ts.plot(cIBEX,col="black",ylab="percentage",
+        main = "First difference series")
+par(new=TRUE)
+ts.plot(cEX,col="blue")
+par(new=TRUE)
+ts.plot(cST,col="green")
+par(new=TRUE)
+ts.plot(cLT,col="red")
+```
+
+Then, here is the new regression model with the differences.
+
+```{r}
+m2 = lm(cIBEX ~ cEX + cST + cLT)
+summary(m2)
+```
+
+From the summary, we can see that some variables are insignificant when modelling the linear regression. Therefore, we take out insignificant variables with pvalue < 0.05. In this case, only the short-term rate (cST) is insignificant and taken out.
+
+```{r}
+m3 = lm(cIBEX ~ cEX + cLT)
+summary(m3)
+```
+
+We now check if the residuals of the joint estimation (new model = m3) are stationary.
+
+```{r}
+plot(m3$residuals,type='l')
+acf(m3$residuals,lag=50)
+pacf(m3$residuals,lag=50)
+```
+```{r}
+Box.test(m3$residuals,lag=50)
+```
+
+We can confirm that the model is stationary. In addition, when running the Box-Test, it confirms the presence of White Noise in the residuals. However, we can see that in the PACF, there is a residual out of limit, at lag 4. 
+
+In this case, we will compare both models (in question 3), one without fitting an ARIMA model (m3) and one fitting an ARIMA model (m4) for lag 4, and see which model has the best predictions and the least variance (errors).
+
+
+###3.	Find the best regression model with time series errors for the dependent variable "ibex"
+
+The following questions will be answered:
+
+**A.	Does this model maintain the same number of lags as the model found in question 2, and the same number of regressors as those found in question 1?
+
+**B.	Derive the final equation for the selected model
+
+In this case, we will use the AR model at lag 4 because there is a lag at time 4 in the PACF (which was not done in question 2 for model 3).
+
+```{r}
+d_features = data.frame(cEX,cLT)
+
+m4=arima(cIBEX,order=c(4,0,0),xreg=d_features,include.mean=F)
+summary(m4)
+```
+
+From the model, we can see that AR(4) is significant in our prediction model. 
+
+We then see if our joint estimation model is still stationary in the residuals.
+```{r}
+
+plot(m4$residuals,type='l')
+
+```
+
+Residuals are stationary. Therefore, we want to see if the residuals are WN.
+
+```{r}
+acf(m4$residuals,lag=50)
+pacf(m4$residuals,lag=50)
+```
+
+```{r}
+Box.test(m4$residuals,lag=50) 
+
+```
+
+No lags seem to be out of limits in the ACF and PACF. In addtion, when running the Box-Test, it confirms the presence of White Noise. 
+
+Are the squared residuals SWN?
+
+```{r}
+acf(m3$residuals^2,lag=50)
+pacf(m3$residuals^2,lag=50)
+
+Box.test(m3$residuals^2,lag=50)
+```
+
+Checking for normality.
+```{r}
+shapiro.test(m4$residuals)
+```
+
+There are no lags out of limit in the ACF and PACF of the squared residuals. To confirm this, we check for normality and there is presence of GWN, hence presence of SWN. 
+
+Thus, there is SWN and we cannot fit GARCH(1,1) model.
+
+###Computing a model with the original data
+
+```{r}
+
+df2<-df_raw
+df2$ST<-NULL
+df2$IBEX<-NULL
+df2$Week<-NULL
+
+m5=arima(IBEX,order=c(4,1,0),xreg=df2,include.mean=F)
+summary(m5)
+
+```
+
+Model 5 (m5) takes in consideration both the differences and the lags taken in question 1 and 2. 
+
+The final equation for the selected model (m5) is:
+
+#####Y(t) = -0.2342Y(t-4) + 1000.4160EX -185.0082LT + error  (where error is WN)
+
+###4. Choose among the three previous models the best one to explain variable "ibex" using the "estimate of the residual variance" as the in-sample criterion.
+
+```{r}
+MSE_fit1<-mean(fit1$residuals^2)
+MSE_fit1
+
+MSE_m2<-mean(m2$residuals^2)
+MSE_m2
+
+MSE_m3<-mean(m3$residuals^2)
+MSE_m3
+
+MSE_m4<-mean(m4$residuals^2)
+MSE_m4
+
+MSE_m5<-mean(m5$residuals^2)
+MSE_m5
+```
+
+Model 5 is the best model because it has the lowest mean squared error (mean residual variance) at 3005.77. 
+
+###5.	For the best model found in question 4, compute the one step ahead point prediction and confidence interval for the "ibex" given the values indicated in the case for all the explanatory variables.
+
+```{r}
+y.pred<-predict(m5, n.ahead=1, newxreg=df2)
+
+y.pred$pred   # point predictions
+mean(y.pred$pred)
+
+y.pred$se     # standard errors
+```
+
+#####In conclusion, when using model 5, we predict that next week's (week 110) IBEX value will be at 3333.57 +/- 55.07672.
